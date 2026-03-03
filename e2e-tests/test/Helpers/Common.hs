@@ -1,5 +1,4 @@
 {-# LANGUAGE RankNTypes #-}
-{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
 module Helpers.Common where
 

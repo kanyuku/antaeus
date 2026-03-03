@@ -4,7 +4,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 {-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:target-version=1.1.0 #-}
 
 module PlutusScripts.SECP256k1.V_1_1 where
@@ -35,8 +34,8 @@ import PlutusTx.Prelude qualified as P
 
 -- Schnorr minting policy --
 
-verifyEcdsaPolicyV12 :: SerialisedScript
-verifyEcdsaPolicyV12 =
+verifyEcdsaPolicyV110_v12Style :: SerialisedScript
+verifyEcdsaPolicyV110_v12Style =
   serialiseCompiledCode $
     $$(P.compile [||mkVerifyEcdsaPolicy||])
       `P.unsafeApplyCode` P.liftCode plcVersion110 verifyEcdsaParams

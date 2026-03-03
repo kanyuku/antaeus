@@ -4,8 +4,6 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
-{-# OPTIONS_GHC -Wno-incomplete-record-updates #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 {-# OPTIONS_GHC -Wno-unused-imports #-}
@@ -399,25 +397,17 @@ w1All
       , C.Address C.ShelleyAddr
       )
 w1All tempAbsPath networkId = do
-  let w1VKeyFile = C.File $ tempAbsPath </> "utxo-keys/utxo1/utxo.vkey"
-      w1SKeyFile = C.File $ tempAbsPath </> "utxo-keys/utxo1/utxo.skey"
-  -- GenesisUTxOKey comes from cardano-testnet
-  mGenesisVKey :: Maybe (C.VerificationKey C.GenesisUTxOKey) <-
-    maybeReadAs (C.AsVerificationKey C.AsGenesisUTxOKey) w1VKeyFile
-  mGenesisSKey :: Maybe (C.SigningKey C.GenesisUTxOKey) <-
-    maybeReadAs (C.AsSigningKey C.AsGenesisUTxOKey) w1SKeyFile
-  -- PaymentKey comes from cardano-cli
-  -- (the likely type for a locally created wallet)
-  mPaymentVKey :: Maybe (C.VerificationKey C.PaymentKey) <-
-    maybeReadAs (C.AsVerificationKey C.AsPaymentKey) w1VKeyFile
-  mPaymentSKey :: Maybe (C.SigningKey C.PaymentKey) <-
-    maybeReadAs (C.AsSigningKey C.AsPaymentKey) w1SKeyFile
-
   let
     vKey :: C.VerificationKey C.PaymentKey =
-      maybe (fromJust mPaymentVKey) C.castVerificationKey mGenesisVKey
+      case (mGenesisVKey, mPaymentVKey) of
+        (Just gk, _) -> C.castVerificationKey gk
+        (_, Just pk) -> pk
+        _ -> error $ "w1All: Could not read " ++ C.unFile w1VKeyFile ++ " matching GenesisUTxOKey or PaymentKey"
     sKey :: C.SigningKey C.PaymentKey =
-      maybe (fromJust mPaymentSKey) C.castSigningKey mGenesisSKey
+      case (mGenesisSKey, mPaymentSKey) of
+        (Just gk, _) -> C.castSigningKey gk
+        (_, Just pk) -> pk
+        _ -> error $ "w1All: Could not read " ++ C.unFile w1SKeyFile ++ " matching GenesisUTxOKey or PaymentKey"
     address = makeAddress (Left vKey) networkId
 
   pure (sKey, vKey, address)
@@ -447,27 +437,19 @@ pool1All
   -> m TestnetStakePool
 pool1All tempAbsPath = do
   let pool1SKeyFile = C.File $ tempAbsPath </> "pools/cold1.skey"
-  mPool1SKey :: Maybe (C.SigningKey C.StakePoolKey) <-
-    maybeReadAs (C.AsSigningKey C.AsStakePoolKey) pool1SKeyFile
-  let pool1SKey = fromJust mPool1SKey
+      pool1VerificationKeyFile = C.File $ tempAbsPath </> "pools/cold1.vkey"
+      pool1StakingRewardsFile = C.File $ tempAbsPath </> "pools/staking-reward1.vkey"
+      pool1VrfKeyFile = C.File $ tempAbsPath </> "pools/vrf1.vkey"
 
-  let pool1VerificationKeyFile = C.File $ tempAbsPath </> "pools/cold1.vkey"
-  mPool1VKey :: Maybe (C.VerificationKey C.StakePoolKey) <-
-    maybeReadAs (C.AsVerificationKey C.AsStakePoolKey) pool1VerificationKeyFile
-  let pool1VKey = fromJust mPool1VKey
-      pool1VKeyHash = C.verificationKeyHash pool1VKey
+  pool1SKey <- U.readAs (C.AsSigningKey C.AsStakePoolKey) pool1SKeyFile
+  pool1VKey <- U.readAs (C.AsVerificationKey C.AsStakePoolKey) pool1VerificationKeyFile
+  pool1StakingRewards <- U.readAs (C.AsVerificationKey C.AsStakeKey) pool1StakingRewardsFile
+  pool1VrfKey <- U.readAs (C.AsVerificationKey C.AsVrfKey) pool1VrfKeyFile
+
+  let pool1VKeyHash = C.verificationKeyHash pool1VKey
       C.StakePoolKeyHash pool1StakePoolKeyHash = pool1VKeyHash
-
-  let pool1StakingRewardsFile =
-        C.File $ tempAbsPath </> "pools/staking-reward1.vkey"
-  mPool1StakingRewards :: Maybe (C.VerificationKey C.StakeKey) <-
-    maybeReadAs (C.AsVerificationKey C.AsStakeKey) pool1StakingRewardsFile
-  let pool1StakeKeyHash = C.verificationKeyHash (fromJust mPool1StakingRewards)
-
-  let pool1VrfKeyFile = C.File $ tempAbsPath </> "pools/vrf1.vkey"
-  mPool1VrfKey :: Maybe (C.VerificationKey C.VrfKey) <-
-    maybeReadAs (C.AsVerificationKey C.AsVrfKey) pool1VrfKeyFile
-  let pool1VrfKeyHash = C.verificationKeyHash (fromJust mPool1VrfKey)
+      pool1StakeKeyHash = C.verificationKeyHash pool1StakingRewards
+      pool1VrfKeyHash = C.verificationKeyHash pool1VrfKey
 
   pure $
     TestnetStakePool

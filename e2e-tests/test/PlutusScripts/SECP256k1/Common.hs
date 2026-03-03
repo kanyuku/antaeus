@@ -7,7 +7,6 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
 -- Not using all CardanoEra
-{-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 
 module PlutusScripts.SECP256k1.Common where
 
@@ -47,6 +46,8 @@ verifySchnorrParams =
           bytesFromHex
             "599de3e582e2a3779208a210dfeae8f330b9af00a47a7fb22e9bb8ef596f301b"
     , msg =
+        -- Note: This decodes to 64 bytes of ASCII '0' (0x30), NOT 64 zero bytes.
+        -- This is intentional for this test vector to ensure message length handling is correct.
         BI.toBuiltin $
           bytesFromHex
             ( "3030303030303030303030303030303030303030303030303030303030303030"

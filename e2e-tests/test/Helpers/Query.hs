@@ -1,7 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE LambdaCase #-}
-{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
-{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-missing-import-lists #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
@@ -131,19 +129,15 @@ getAddressTxInsValue era con address = do
   pure (txIns, mconcat values)
 
 -- TODO: loop timeout
-waitForTxIdAtAddress
-  :: (MonadIO m, MonadTest m)
-  => C.CardanoEra era
-  -> C.LocalNodeConnectInfo
-  -> C.Address C.ShelleyAddr
-  -> C.TxId
-  -> m ()
 waitForTxIdAtAddress era localNodeConnectInfo address txId = do
-  let loop = do
+  let timeoutSeconds = 90 :: Int
+      loop 0 = error "waitForTxIdAtAddress: timeout"
+      loop i = do
+        HE.threadDelay 1000000 -- 1s
         txIns <- txInsFromUtxo =<< findUTxOByAddress era localNodeConnectInfo address
         let txIds = map (\(C.TxIn txId _) -> txId) txIns
-        unless (txId `elem` txIds) loop
-  loop
+        unless (txId `elem` txIds) (loop (pred i))
+  loop timeoutSeconds
 
 waitForTxInAtAddress
   :: (MonadIO m, MonadTest m)
@@ -299,32 +293,23 @@ getConstitution era localNodeConnectInfo = do
     Left _eraMismatch -> pure Nothing
     Right c -> pure (Just c)
 
-getConstitutionAnchor
-  :: (MonadIO m, MonadTest m)
-  => C.CardanoEra era
-  -> C.LocalNodeConnectInfo
-  -> m (C.Anchor (L.EraCrypto (C.ShelleyLedgerEra era)))
-getConstitutionAnchor era localNodeConnectInfo =
-  C.constitutionAnchor . fromJust <$> getConstitution era localNodeConnectInfo
+getConstitutionAnchor era localNodeConnectInfo = do
+  mConstitution <- getConstitution era localNodeConnectInfo
+  case mConstitution of
+    Nothing -> error "getConstitutionAnchor: Constitution not found or era mismatch"
+    Just c -> pure $ C.constitutionAnchor c
 
-getConstitutionAnchorUrl
-  :: (MonadIO m, MonadTest m)
-  => C.CardanoEra era
-  -> C.LocalNodeConnectInfo
-  -> m L.Url
-getConstitutionAnchorUrl era localNodeConnectInfo =
-  C.anchorUrl . C.constitutionAnchor . fromJust <$> getConstitution era localNodeConnectInfo
+getConstitutionAnchorUrl era localNodeConnectInfo = do
+  mConstitution <- getConstitution era localNodeConnectInfo
+  case mConstitution of
+    Nothing -> error "getConstitutionAnchorUrl: Constitution not found or era mismatch"
+    Just c -> pure $ C.anchorUrl $ C.constitutionAnchor c
 
-getConstitutionAnchorHash
-  :: (MonadIO m, MonadTest m)
-  => C.CardanoEra era
-  -> C.LocalNodeConnectInfo
-  -> m (C.SafeHash (L.EraCrypto (C.ShelleyLedgerEra era)) C.AnchorData)
-getConstitutionAnchorHash era localNodeConnectInfo =
-  C.anchorDataHash
-    . C.constitutionAnchor
-    . fromJust
-    <$> getConstitution era localNodeConnectInfo
+getConstitutionAnchorHash era localNodeConnectInfo = do
+  mConstitution <- getConstitution era localNodeConnectInfo
+  case mConstitution of
+    Nothing -> error "getConstitutionAnchorHash: Constitution not found or era mismatch"
+    Just c -> pure $ C.anchorDataHash $ C.constitutionAnchor c
 
 getConstitutionAnchorHashAsString
   :: (MonadIO m, MonadTest m)

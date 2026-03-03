@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
-{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
@@ -383,7 +382,7 @@ buildTxWithError era localNodeConnectInfo txBody changeAddress mWitnessOverride 
           C.queryStateForBalancedTx era allInputs certs
       )
 
-  let ( nodeEraUtxo
+      ( nodeEraUtxo
         , ledgerPParams
         , eraHistory
         , systemStart
@@ -391,7 +390,10 @@ buildTxWithError era localNodeConnectInfo txBody changeAddress mWitnessOverride 
         , stakeDelegDeposits
         , drepDelegDeposits
         , _featured
-        ) = U.unsafeFromRight $ U.unsafeFromRight localStateQueryResult
+        ) = case localStateQueryResult of
+              Left err -> error $ "buildTxWithError: ExecuteLocalStateQueryExpr failed: " ++ show err
+              Right (Left err) -> error $ "buildTxWithError: QueryStateForBalancedTx failed: " ++ show err
+              Right (Right res) -> res
       sbe = toShelleyBasedEra era
 
   return $
