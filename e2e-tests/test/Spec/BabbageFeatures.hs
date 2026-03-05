@@ -15,7 +15,6 @@ import Cardano.Api qualified as C
 import Cardano.Ledger.Coin (Coin)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Map qualified as Map
-import Data.Maybe (fromJust)
 import Data.Time.Clock qualified as Time
 import Data.Time.Clock.POSIX qualified as Time
 import GHC.IsList (fromList)
@@ -76,8 +75,9 @@ checkTxInfoV2Test networkOptions testParams = do
 
   txIn <- Q.adaOnlyTxInAtAddress era conn wAddress
   txInAsTxOut@(C.TxOut _ txInValue _ _) <-
-    Q.getTxOutAtAddress era conn wAddress txIn "txInAsTxOut <- getTxOutAtAddress"
+    Q.getTxOutAtAddress era conn wAddress txIn  90 "txInAsTxOut <- getTxOutAtAddress"
 
+  mTime' <- H.evalEither $ maybe (Left "mTime must be Just to calculate valid boundaries") Right mTime
   let tokenValues =
         fromList
           [ (PS.checkV2TxInfoAssetIdV2, 1)
@@ -115,8 +115,7 @@ checkTxInfoV2Test networkOptions testParams = do
               Time.utcTimeToPOSIXSeconds $
                 -- subtract 10 seconds from the lower bound
                 -- so it is well before the testnet start time
-                Time.addUTCTime (-10) $
-                  fromJust mTime -- before slot 1
+                Time.addUTCTime (-10) mTime' -- before slot 1
       upperBound =
         P.fromMilliSeconds $
           P.DiffMilliSeconds $
@@ -182,6 +181,7 @@ checkTxInfoV2Test networkOptions testParams = do
       conn
       wAddress
       (Tx.txIn txId 0)
+      90
       "resultTxOut <- getTxOutAtAddress"
   txOutHasTokenValue <- Q.txOutHasValue resultTxOut tokenValues
   assert "txOut has tokens" txOutHasTokenValue
@@ -230,6 +230,7 @@ referenceScriptMintTest networkOptions testParams = do
             refScriptLovelaceValue
             wAddress
             (PS.unPlutusScriptV3 PS_1_1.alwaysSucceedPolicyScriptV3)
+        _ -> error $ "Unsupported era: " ++ show era
       otherTxOut = Tx.txOut era (C.lovelaceToValue 5_000_000) wAddress
 
       txBodyContent =
@@ -242,7 +243,7 @@ referenceScriptMintTest networkOptions testParams = do
   Tx.submitTx sbe conn signedTx
   let refScriptTxIn = Tx.txIn (Tx.txId signedTx) 0
       otherTxIn = Tx.txIn (Tx.txId signedTx) 1
-  Q.waitForTxInAtAddress era conn wAddress refScriptTxIn "waitForTxInAtAddress"
+  Q.waitForTxInAtAddress era conn wAddress refScriptTxIn 90 "waitForTxInAtAddress"
 
   -- build a transaction to mint token using reference script
 
@@ -255,6 +256,7 @@ referenceScriptMintTest networkOptions testParams = do
           ( fromList [(PS_1_1.alwaysSucceedAssetIdV3, 6)]
           , Map.fromList [PS_1_1.alwaysSucceedMintWitnessV3 sbe (Just refScriptTxIn)]
           )
+        _ -> error $ "Unsupported era: " ++ show era
       collateral = Tx.txInsCollateral era [otherTxIn]
       txOut = Tx.txOut era (C.lovelaceToValue 3_000_000 <> tokenValues) wAddress
 
@@ -272,7 +274,7 @@ referenceScriptMintTest networkOptions testParams = do
   let expectedTxIn = Tx.txIn (Tx.txId signedTx2) 0
   -- Query for txo and assert it contains newly minted token
   resultTxOut <-
-    Q.getTxOutAtAddress era conn wAddress expectedTxIn "getTxOutAtAddress"
+    Q.getTxOutAtAddress era conn wAddress expectedTxIn 90 "getTxOutAtAddress"
   txOutHasTokenValue <- Q.txOutHasValue resultTxOut tokenValues
   assert "txOut has tokens" txOutHasTokenValue
 
@@ -316,10 +318,12 @@ referenceScriptInlineDatumSpendTest
               refScriptLovelaceValue
               wAddress
               (PS.unPlutusScriptV3 PS_1_1.alwaysSucceedSpendScriptV3)
+          _ -> error $ "Unsupported era: " ++ show era
         otherTxOut = Tx.txOut era (C.lovelaceToValue 5_000_000) wAddress
         scriptAddress = case era of
           C.BabbageEra -> makeAddress (Right PS_1_0.alwaysSucceedSpendScriptHashV2) networkId
           C.ConwayEra -> makeAddress (Right PS_1_1.alwaysSucceedSpendScriptHashV3) networkId
+          _ -> error $ "Unsupported era: " ++ show era
         scriptTxOut = Tx.txOutWithInlineDatum era (C.lovelaceToValue 10_000_000) scriptAddress (PS.toScriptData ())
         txBodyContent =
           (Tx.emptyTxBodyContent sbe pparams)
@@ -332,13 +336,14 @@ referenceScriptInlineDatumSpendTest
     let refScriptTxIn = Tx.txIn (Tx.txId signedTx) 0
         otherTxIn = Tx.txIn (Tx.txId signedTx) 1
         txInAtScript = Tx.txIn (Tx.txId signedTx) 2
-    Q.waitForTxInAtAddress era localNodeConnectInfo wAddress refScriptTxIn "waitForTxInAtAddress"
+    Q.waitForTxInAtAddress era localNodeConnectInfo wAddress refScriptTxIn 90 "waitForTxInAtAddress"
 
     -- build a transaction to mint token using reference script
 
     let witness = case era of
           C.BabbageEra -> PS_1_0.alwaysSucceedSpendWitnessV2 sbe (Just refScriptTxIn) Nothing
           C.ConwayEra -> PS_1_1.alwaysSucceedSpendWitnessV3 sbe (Just refScriptTxIn) Nothing
+          _ -> error $ "Unsupported era: " ++ show era
         scriptTxIn = Tx.txInWitness txInAtScript witness
         collateral = Tx.txInsCollateral era [otherTxIn]
         adaValue = C.lovelaceToValue 4_200_000
@@ -357,7 +362,7 @@ referenceScriptInlineDatumSpendTest
     let expectedTxIn = Tx.txIn (Tx.txId signedTx2) 0
     -- Query for txo and assert it contains newly minted token
     resultTxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo wAddress expectedTxIn "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo wAddress expectedTxIn 90 "getTxOutAtAddress"
     txOutHasAdaValue <- Q.txOutHasValue resultTxOut adaValue
     assert "txOut has tokens" txOutHasAdaValue
 
@@ -399,10 +404,12 @@ referenceScriptDatumHashSpendTest networkOptions TestParams{localNodeConnectInfo
             refScriptLovelaceValue
             wAddress
             (PS.unPlutusScriptV3 PS_1_1.alwaysSucceedSpendScriptV3)
+        _ -> error $ "Unsupported era: " ++ show era
       otherTxOut = Tx.txOut era (C.lovelaceToValue 5_000_000) wAddress
       scriptAddress = case era of
         C.BabbageEra -> makeAddress (Right PS_1_0.alwaysSucceedSpendScriptHashV2) networkId
         C.ConwayEra -> makeAddress (Right PS_1_1.alwaysSucceedSpendScriptHashV3) networkId
+        _ -> error $ "Unsupported era: " ++ show era
       datum = PS.toScriptData ()
       scriptTxOut = Tx.txOutWithDatumHash era (C.lovelaceToValue 10_000_000) scriptAddress datum
 
@@ -417,7 +424,7 @@ referenceScriptDatumHashSpendTest networkOptions TestParams{localNodeConnectInfo
   let refScriptTxIn = Tx.txIn (Tx.txId signedTx) 0
       otherTxIn = Tx.txIn (Tx.txId signedTx) 1
       txInAtScript = Tx.txIn (Tx.txId signedTx) 2
-  Q.waitForTxInAtAddress era localNodeConnectInfo wAddress refScriptTxIn "waitForTxInAtAddress"
+  Q.waitForTxInAtAddress era localNodeConnectInfo wAddress refScriptTxIn  90 "waitForTxInAtAddress"
 
   -- build a transaction to mint token using reference script
 
@@ -430,6 +437,7 @@ referenceScriptDatumHashSpendTest networkOptions TestParams{localNodeConnectInfo
           Tx.txInWitness
             txInAtScript
             (PS_1_1.alwaysSucceedSpendWitnessV3 sbe (Just refScriptTxIn) (Just datum))
+        _ -> error $ "Unsupported era: " ++ show era
       collateral = Tx.txInsCollateral era [otherTxIn]
       adaValue = C.lovelaceToValue 4_200_000
       txOut = Tx.txOut era adaValue wAddress
@@ -447,7 +455,7 @@ referenceScriptDatumHashSpendTest networkOptions TestParams{localNodeConnectInfo
   let expectedTxIn = Tx.txIn (Tx.txId signedTx2) 0
   -- Query for txo and assert it contains newly minted token
   resultTxOut <-
-    Q.getTxOutAtAddress era localNodeConnectInfo wAddress expectedTxIn "getTxOutAtAddress"
+    Q.getTxOutAtAddress era localNodeConnectInfo wAddress expectedTxIn 90 "getTxOutAtAddress"
   txOutHasAdaValue <- Q.txOutHasValue resultTxOut adaValue
   assert "txOut has tokens" txOutHasAdaValue
 
@@ -477,6 +485,7 @@ inlineDatumSpendTest networkOptions TestParams{localNodeConnectInfo, pparams, ne
   let scriptAddress = case era of
         C.BabbageEra -> makeAddress (Right PS_1_0.alwaysSucceedSpendScriptHashV2) networkId
         C.ConwayEra -> makeAddress (Right PS_1_1.alwaysSucceedSpendScriptHashV3) networkId
+        _ -> error $ "Unsupported era: " ++ show era
       scriptTxOut = Tx.txOutWithInlineDatum era (C.lovelaceToValue 10_000_000) scriptAddress (PS.toScriptData ())
       otherTxOut = Tx.txOut era (C.lovelaceToValue 5_000_000) wAddress
 
@@ -490,7 +499,7 @@ inlineDatumSpendTest networkOptions TestParams{localNodeConnectInfo, pparams, ne
   Tx.submitTx sbe localNodeConnectInfo signedTx
   let txInAtScript = Tx.txIn (Tx.txId signedTx) 0
       otherTxIn = Tx.txIn (Tx.txId signedTx) 1
-  Q.waitForTxInAtAddress era localNodeConnectInfo scriptAddress txInAtScript "waitForTxInAtAddress"
+  Q.waitForTxInAtAddress era localNodeConnectInfo scriptAddress txInAtScript 90 "waitForTxInAtAddress"
 
   -- build a transaction to mint token using reference script
 
@@ -499,6 +508,7 @@ inlineDatumSpendTest networkOptions TestParams{localNodeConnectInfo, pparams, ne
     scriptTxIn = case era of
       C.BabbageEra -> Tx.txInWitness txInAtScript (PS_1_0.alwaysSucceedSpendWitnessV2 sbe Nothing Nothing)
       C.ConwayEra -> Tx.txInWitness txInAtScript (PS_1_1.alwaysSucceedSpendWitnessV3 sbe Nothing Nothing)
+      _ -> error $ "Unsupported era: " ++ show era
     collateral = Tx.txInsCollateral era [otherTxIn]
     adaValue = C.lovelaceToValue 4_200_000
     txOut = Tx.txOut era adaValue wAddress
@@ -515,7 +525,7 @@ inlineDatumSpendTest networkOptions TestParams{localNodeConnectInfo, pparams, ne
   let expectedTxIn = Tx.txIn (Tx.txId signedTx2) 0
   -- Query for txo and assert it contains newly minted token
   resultTxOut <-
-    Q.getTxOutAtAddress era localNodeConnectInfo wAddress expectedTxIn "getTxOutAtAddress"
+    Q.getTxOutAtAddress era localNodeConnectInfo wAddress expectedTxIn 90 "getTxOutAtAddress"
   txOutHasAdaValue <- Q.txOutHasValue resultTxOut adaValue
   assert "txOut has tokens" txOutHasAdaValue
 
@@ -711,6 +721,7 @@ returnCollateralWithTokensValidScriptTest
                 , PS_1_1.alwaysSucceedMintWitnessV3 sbe Nothing
                 ]
             )
+          _ -> error $ "Unsupported era: " ++ show era
         collateral = Tx.txInsCollateral era [txIn]
         txOut =
           Tx.txOutWithInlineDatum
@@ -730,7 +741,7 @@ returnCollateralWithTokensValidScriptTest
     signedTx <- Tx.buildTx era localNodeConnectInfo txBodyContent wAddress wSKey
     Tx.submitTx sbe localNodeConnectInfo signedTx
     let txIn2 = Tx.txIn (Tx.txId signedTx) 0
-    Q.waitForTxInAtAddress era localNodeConnectInfo wAddress txIn2 "waitForTxInAtAddress"
+    Q.waitForTxInAtAddress era localNodeConnectInfo wAddress txIn2 90 "waitForTxInAtAddress"
 
     -- build and submit transaction with tokens in collateral input.
     -- This is allowed because using return collateral feature.
@@ -738,6 +749,7 @@ returnCollateralWithTokensValidScriptTest
     let tokenValues2 = case era of
           C.BabbageEra -> fromList [(PS_1_0.alwaysSucceedAssetIdV2, 20)]
           C.ConwayEra -> fromList [(PS_1_0.alwaysSucceedAssetIdV2, 20), (PS_1_1.alwaysSucceedAssetIdV3, 20)]
+          _ -> error $ "Unsupported era: " ++ show era
         collateral2 = Tx.txInsCollateral era [txIn2]
         txOut2 =
           Tx.txOutWithInlineDatum
@@ -761,7 +773,7 @@ returnCollateralWithTokensValidScriptTest
     let expectedTxIn = Tx.txIn (Tx.txId signedTx2) 0
     -- Query for txo and assert it contains newly minted token
     resultTxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo wAddress expectedTxIn "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo wAddress expectedTxIn 90 "getTxOutAtAddress"
     txOutHasTokenValue <- Q.txOutHasValue resultTxOut tokenValues2
     assert "txOut has tokens" txOutHasTokenValue
 
@@ -816,7 +828,7 @@ submitWithInvalidScriptThenCollateralIsTakenAndReturnedTest
     signedTx <- Tx.buildTx era localNodeConnectInfo txBodyContent wAddress wSKey
     Tx.submitTx sbe localNodeConnectInfo signedTx
     let collateralTxIn = Tx.txIn (Tx.txId signedTx) 0
-    Q.waitForTxInAtAddress era localNodeConnectInfo wAddress collateralTxIn "waitForTxInAtAddress"
+    Q.waitForTxInAtAddress era localNodeConnectInfo wAddress collateralTxIn 90 "waitForTxInAtAddress"
 
     -- build and submit transaction with failing script
 
@@ -829,8 +841,9 @@ submitWithInvalidScriptThenCollateralIsTakenAndReturnedTest
             )
           C.ConwayEra ->
             ( fromList [(PS_1_1.alwaysFailsAssetIdV3, 1)]
-            , Map.fromList [PS_1_1.alwaysSucceedMintWitnessV3 sbe Nothing]
+            , Map.fromList [PS_1_1.alwaysFailsMintWitnessV3 sbe Nothing]
             )
+          _ -> error $ "Unsupported era: " ++ show era
         collateral2 = Tx.txInsCollateral era [collateralTxIn]
         txOut1 = Tx.txOut era (C.lovelaceToValue 2_000_000) wAddress
         txOut2 = Tx.txOut era (C.lovelaceToValue 3_000_000 <> tokenValues2) wAddress
@@ -856,7 +869,7 @@ submitWithInvalidScriptThenCollateralIsTakenAndReturnedTest
     -- Query for return collateral txo and assert presence of ada and tokens from the first tx
     let expectedTxIn = Tx.txIn (Tx.txId signedTx2) 3 -- collateral return index is n outputs (including change)
     resultTxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo wAddress expectedTxIn "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo wAddress expectedTxIn 90 "getTxOutAtAddress"
     txOutHasAdaAndTokenValue <- Q.txOutHasValue resultTxOut colReturnValue
     a1 <- assert "txOut has tokens" txOutHasAdaAndTokenValue
     -- Query collateral input and assert it has been spent

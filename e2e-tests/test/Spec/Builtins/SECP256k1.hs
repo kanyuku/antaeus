@@ -99,6 +99,7 @@ verifySchnorrAndEcdsaTest networkOptions testParams = do
               ]
           , show C.PlutusV3
           )
+        _ -> error $ "Unsupported era: " ++ show era
       txOut = Tx.txOut era (C.lovelaceToValue 3_000_000 <> tokenValues) w1Address
       collateral = Tx.txInsCollateral era [txIn]
       txBodyContent =
@@ -146,6 +147,6 @@ verifySchnorrAndEcdsaTest networkOptions testParams = do
 
       -- Query for txo and assert it contains newly minting tokens to prove successful use of SECP256k1 builtins
       resultTxOut <-
-        Q.getTxOutAtAddress era conn w1Address expectedTxIn "TN.getTxOutAtAddress"
+        Q.getTxOutAtAddress era conn w1Address expectedTxIn 90 "TN.getTxOutAtAddress"
       txOutHasTokenValue <- Q.txOutHasValue resultTxOut tokenValues
       assert "txOut has tokens" txOutHasTokenValue

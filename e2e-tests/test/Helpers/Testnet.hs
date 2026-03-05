@@ -32,7 +32,6 @@ import Control.Lens ((&), (.~))
 import Control.Monad (forM, forM_)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Default.Class (def)
-import Data.Maybe (fromJust)
 import Data.Time.Clock.POSIX qualified as Time
 import Hedgehog (MonadTest)
 import Hedgehog qualified as H

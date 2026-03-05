@@ -18,7 +18,6 @@ import Cardano.Ledger.Crypto ()
 import Control.Lens ((^.))
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Map qualified as Map
-import Data.Maybe (fromJust)
 import Data.Time.Clock qualified as Time
 import Data.Time.Clock.POSIX qualified as Time
 import GHC.IsList (fromList)
@@ -85,8 +84,8 @@ checkTxInfoV1Test networkOptions params = do
       localNodeConnectInfo
       w1Address
       txIn
-      "txInAsTxOut <- getTxOutAtAddress"
-
+       90 "txInAsTxOut <- getTxOutAtAddress"
+  mTime' <- H.evalEither $ maybe (Left "mTime must be Just to calculate valid boundaries") Right mTime
   let tokenValues = fromList [(PS.checkV1TxInfoAssetIdV1, 1)]
       executionUnits =
         C.ExecutionUnits
@@ -115,8 +114,7 @@ checkTxInfoV1Test networkOptions params = do
               Time.utcTimeToPOSIXSeconds $
                 -- subtract 10 seconds from the lower bound
                 -- so it is well before the testnet start time
-                Time.addUTCTime (-10) $
-                  fromJust mTime -- before slot 1
+                Time.addUTCTime (-10) mTime' -- before slot 1
       upperBound =
         P.fromMilliSeconds $
           -- ~10mins after slot 1 (to account for testnet init time)
@@ -172,7 +170,7 @@ checkTxInfoV1Test networkOptions params = do
       localNodeConnectInfo
       w1Address
       expectedTxIn
-      "resultTxOut <- getTxOutAtAddress"
+       90 "resultTxOut <- getTxOutAtAddress"
   txOutHasTokenValue <- Q.txOutHasValue resultTxOut tokenValues
   assert "txOut has tokens" txOutHasTokenValue
 
@@ -204,7 +202,7 @@ datumHashSpendTest networkOptions testParams = do
   -- build a transaction with two script outputs to be spent
   -- only one has its datum value embedded in the tx body
 
-  txIn <- Q.adaOnlyTxInAtAddress era conn w1Address
+  initialTxIn <- Q.adaOnlyTxInAtAddress era conn w1Address
 
   let scriptAddress = case era of
         C.AlonzoEra ->
@@ -213,6 +211,7 @@ datumHashSpendTest networkOptions testParams = do
           makeAddress (Right PS_1_0.alwaysSucceedSpendScriptHashV2) networkId
         C.ConwayEra ->
           makeAddress (Right PS_1_1.alwaysSucceedSpendScriptHashV3) networkId
+        _ -> error $ "Unsupported era: " ++ show era
       datum1 = PS.toScriptData (1 :: Integer)
       datum2 = PS.toScriptData (2 :: Integer)
       scriptTxOut1 =
@@ -246,6 +245,7 @@ datumHashSpendTest networkOptions testParams = do
     conn
     scriptAddress
     txInAtScript1
+    90
     "waitForTxInAtAddress"
 
   -- build a transaction to spend from script with datum attached to the trasaction
@@ -279,6 +279,7 @@ datumHashSpendTest networkOptions testParams = do
       conn
       w1Address
       expectedTxIn1
+      90
       "resultTxOut1 <- getTxOutAtAddress"
   txOutHasAdaValue <- Q.txOutHasValue resultTxOut1 adaValue
   H.assert txOutHasAdaValue
@@ -358,6 +359,7 @@ mintBurnTest networkOptions TestParams{localNodeConnectInfo, pparams, networkId,
       localNodeConnectInfo
       w1Address
       expectedTxIn
+      90
       "resultTxOut <- getTxOutAtAddress"
   txOutHasTokenValue <- Q.txOutHasValue resultTxOut tokenValues
   H.assert txOutHasTokenValue
@@ -405,6 +407,7 @@ mintBurnTest networkOptions TestParams{localNodeConnectInfo, pparams, networkId,
       localNodeConnectInfo
       w1Address
       expectedTxIn2
+      90
       "resultTxOut2 <- getTxOutAtAddress"
   txOutHasTokenValue2 <- Q.txOutHasValue resultTxOut2 tokenValues2
   assert "txOut has tokens" txOutHasTokenValue2
@@ -477,6 +480,7 @@ collateralContainsTokenErrorTest networkOptions TestParams{localNodeConnectInfo,
       localNodeConnectInfo
       w1Address
       expectedTxIn
+      90
       "resultTxOut <- getTxOutAtAddress"
   txOutHasTokenValue <- Q.txOutHasValue resultTxOut tokenValues
   H.assert txOutHasTokenValue
@@ -700,6 +704,7 @@ tooManyCollateralInputsErrorTest
       localNodeConnectInfo
       w1Address
       (head collateralTxIns)
+      90
       "waitForTxInAtAddress"
 
     -- build a transaction to mint again but using a collateral input that contains a native token

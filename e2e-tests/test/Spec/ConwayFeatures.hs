@@ -29,7 +29,6 @@ import Data.ByteString qualified as BS
 import Data.Function ((&))
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Data.Maybe (fromJust)
 import Data.Ratio ((%))
 import Data.Text qualified as Text
 import Data.Time.Clock qualified as Time
@@ -96,9 +95,9 @@ checkTxInfoV3Test networkOptions TestParams{..} = do
 
   txIn <- Q.adaOnlyTxInAtAddress era localNodeConnectInfo w1Address
   txInAsTxOut@(C.TxOut _ txInValue _ _) <-
-    Q.getTxOutAtAddress era localNodeConnectInfo w1Address txIn "txInAsTxOut <- getTxOutAtAddress"
+    Q.getTxOutAtAddress era localNodeConnectInfo w1Address txIn 90 "txInAsTxOut <- getTxOutAtAddress"
 
-  -- TODO: use V3 scripts here and check for V3 TxInfo fields
+  mTime' <- H.evalEither $ maybe (Left "mTime must be Just to calculate valid boundaries") Right mTime
   let tokenValues = fromList [(PS.checkV2TxInfoAssetIdV2, 1), (PS_1_0.alwaysSucceedAssetIdV2, 2)]
       executionUnits1 = C.ExecutionUnits{C.executionSteps = 1_000_000_000, C.executionMemory = 10_000_000}
       executionUnits2 = C.ExecutionUnits{C.executionSteps = 1_000_000_000, C.executionMemory = 4_000_000}
@@ -117,8 +116,7 @@ checkTxInfoV3Test networkOptions TestParams{..} = do
           P.DiffMilliSeconds $
             U.posixToMilliseconds $
               Time.utcTimeToPOSIXSeconds $
-                Time.addUTCTime (-1) $
-                  fromJust mTime -- subtract 1 second from the lower bound to guarentee before testnet start time
+                Time.addUTCTime (-1) mTime' -- subtract 1 second from the lower bound to guarentee before testnet start time
                   -- before slot 1
       upperBound =
         P.fromMilliSeconds $
@@ -185,6 +183,7 @@ checkTxInfoV3Test networkOptions TestParams{..} = do
       localNodeConnectInfo
       w1Address
       expectedTxIn
+      90
       "resultTxOut <- getTxOutAtAddress"
   txOutHasTokenValue <- Q.txOutHasValue resultTxOut tokenValues
   assert "txOut has tokens" txOutHasTokenValue
@@ -229,7 +228,7 @@ registerStakePoolTest
     Tx.submitTx sbe localNodeConnectInfo signedRegSPTx
     let expTxIn = Tx.txIn (Tx.txId signedRegSPTx) 0
     regDRepResultTxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address expTxIn "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address expTxIn 90 "getTxOutAtAddress"
     H.annotate $ show regDRepResultTxOut
     success
 
@@ -284,6 +283,7 @@ registerStakingTest Staking{..} networkOptions testParams = do
       localNodeConnectInfo
       w1Address
       expTxIn
+      90
       "getTxOutAtAddress"
   H.annotate $ show w1StakeRegResultTxOut
   success
@@ -353,7 +353,7 @@ registerDRep mkDrepSkey dRepRegCert networkOptions testParams = do
   let txId = Tx.txId signedRegDRepTx
   H.annotate $ show txId
   regDRepResultTxOut <-
-    Q.getTxOutAtAddress era conn w1Address (Tx.txIn txId 0) "getTxOutAtAddress"
+    Q.getTxOutAtAddress era conn w1Address (Tx.txIn txId 0) 90 "getTxOutAtAddress"
   H.annotate $ show regDRepResultTxOut
   success
 
@@ -402,7 +402,7 @@ registerCommitteeTest committee networkOptions testParams = do
   let txId = Tx.txId signedCommitteeRegTx
   H.annotate $ show txId
   regDRepResultTxOut <-
-    Q.getTxOutAtAddress era conn w1Address (Tx.txIn txId 0) "getTxOutAtAddress"
+    Q.getTxOutAtAddress era conn w1Address (Tx.txIn txId 0) 90 "getTxOutAtAddress"
   H.annotate $ show regDRepResultTxOut
   success
 
@@ -458,7 +458,7 @@ delegateToDRep
     Tx.submitTx sbe localNodeConnectInfo signedStakeDelegTx
     let expTxIn = Tx.txIn (Tx.txId signedStakeDelegTx) 0
     stakeDelegResultTxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address expTxIn "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address expTxIn 90 "getTxOutAtAddress"
     H.annotate $ show stakeDelegResultTxOut
     success
 
@@ -505,7 +505,7 @@ delegateToStakePoolTest
     Tx.submitTx sbe localNodeConnectInfo signedStakeDelegTx
     let expTxIn = Tx.txIn (Tx.txId signedStakeDelegTx) 0
     stakeDelegResultTxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address expTxIn "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address expTxIn 90 "getTxOutAtAddress"
     H.annotate $ show stakeDelegResultTxOut
     success
 
@@ -554,9 +554,9 @@ constitutionProposalAndVoteTest
     H.writeFile constitutionPath "a new way of life"
     constituionBS <- H.evalIO $ BS.readFile constitutionPath
     -- TODO: add constitution script (proposal policy) once implemented in cardano-api
+    constitutionUrl <- H.evalEither $ maybe (Left "Invalid constitution URL") Right $ (\t -> C.textToUrl (Text.length t) t) "https://example.com/constituion.txt"
     let
       constituionHash = show (Crypto.hashWith id constituionBS :: Crypto.Hash Crypto.Blake2b_256 BS.ByteString)
-      constitutionUrl = fromJust $ (\t -> C.textToUrl (Text.length t) t) "https://example.com/constituion.txt"
       anchor = C.createAnchor constitutionUrl constituionBS
     H.annotate constituionHash
 
@@ -598,7 +598,7 @@ constitutionProposalAndVoteTest
         _tx2In2 = Tx.txIn (Tx.txId signedTx1) 1
         tx2In3 = Tx.txIn (Tx.txId signedTx1) 2 -- change output
     result1TxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address tx2In3 "getTxOutAtAddress1"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address tx2In3 90 "getTxOutAtAddress1"
     H.annotate $ show result1TxOut
 
     -- vote on the constituion
@@ -635,7 +635,7 @@ constitutionProposalAndVoteTest
     Tx.submitTx sbe localNodeConnectInfo signedTx2
     let result2TxIn = Tx.txIn (Tx.txId signedTx2) 0
     result2TxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address result2TxIn "getTxOutAtAddress2"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address result2TxIn 90 "getTxOutAtAddress2"
     H.annotate $ show result2TxOut
 
     -- wait for next epoch before asserting for new constitution
@@ -695,8 +695,8 @@ committeeProposalAndVoteTest
 
     -- build a transaction to propose the new committee
 
-    let anchorUrl = (\t -> C.textToUrl (Text.length t) t) "https://example.com/committee.txt"
-        anchor = C.createAnchor (fromJust anchorUrl) "new committee"
+    anchorUrl <- H.evalEither $ maybe (Left "Invalid committee URL") Right $ (\t -> C.textToUrl (Text.length t) t) "https://example.com/committee.txt"
+    let anchor = C.createAnchor anchorUrl "new committee"
     tx1In <- Q.adaOnlyTxInAtAddress era localNodeConnectInfo w1Address
     let
       tx1Out1 = Tx.txOut era (C.lovelaceToValue 2_000_000) w1Address
@@ -732,7 +732,7 @@ committeeProposalAndVoteTest
         _tx2In2 = Tx.txIn (Tx.txId signedTx1) 1
         tx2In3 = Tx.txIn (Tx.txId signedTx1) 2 -- change output
     result1TxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address tx2In3 "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address tx2In3 90 "getTxOutAtAddress"
     H.annotate $ show result1TxOut
 
     -- vote on the committee
@@ -762,7 +762,7 @@ committeeProposalAndVoteTest
     Tx.submitTx sbe localNodeConnectInfo signedTx2
     let result2TxIn = Tx.txIn (Tx.txId signedTx2) 0
     result2TxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address result2TxIn "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address result2TxIn 90 "getTxOutAtAddress"
     H.annotate $ show result2TxOut
     success -- TODO: check new committee is enacted (will influence future voting)
 committeeProposalAndVoteTest _ ScriptDRep{} _ _ _ = error "committeeProposalAndVoteTest: ScriptDRep not supported"
@@ -801,8 +801,8 @@ noConfidenceProposalAndVoteTest
 
     -- build a transaction to propose the motion of no-confidence
 
-    let anchorUrl = (\t -> C.textToUrl (Text.length t) t) "https://example.com/no_confidence.txt"
-        anchor = C.createAnchor (fromJust anchorUrl) "motion of no confidence"
+    anchorUrl <- H.evalEither $ maybe (Left "Invalid no-confidence URL") Right $ (\t -> C.textToUrl (Text.length t) t) "https://example.com/no_confidence.txt"
+    let anchor = C.createAnchor anchorUrl "motion of no confidence"
     tx1In <- Q.adaOnlyTxInAtAddress era localNodeConnectInfo w1Address
     let
       tx1Out1 = Tx.txOut era (C.lovelaceToValue 2_000_000) w1Address
@@ -830,7 +830,7 @@ noConfidenceProposalAndVoteTest
         _tx2In2 = Tx.txIn (Tx.txId signedTx1) 1
         tx2In3 = Tx.txIn (Tx.txId signedTx1) 2 -- change output
     result1TxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address tx2In3 "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address tx2In3 90 "getTxOutAtAddress"
     H.annotate $ show result1TxOut
 
     -- vote on the motion of no-confidence
@@ -860,7 +860,7 @@ noConfidenceProposalAndVoteTest
     Tx.submitTx sbe localNodeConnectInfo signedTx2
     let result2TxIn = Tx.txIn (Tx.txId signedTx2) 0
     result2TxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address result2TxIn "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address result2TxIn 90 "getTxOutAtAddress"
     H.annotate $ show result2TxOut
     success -- TODO: check motion of no-confidence is enacted
 noConfidenceProposalAndVoteTest ScriptDRep{} _ _ _ =
@@ -902,8 +902,8 @@ parameterChangeProposalAndVoteTest
 
     -- build a transaction to propose a change to the protocol parameters
 
-    let anchorUrl = (\t -> C.textToUrl (Text.length t) t) "https://example.com/pparameters.txt"
-        anchor = C.createAnchor (fromJust anchorUrl) "protocol parameters"
+    anchorUrl <- H.evalEither $ maybe (Left "Invalid pparameters URL") Right $ (\t -> C.textToUrl (Text.length t) t) "https://example.com/pparameters.txt"
+    let anchor = C.createAnchor anchorUrl "protocol parameters"
     tx1In <- Q.adaOnlyTxInAtAddress era localNodeConnectInfo w1Address
     let
       tx1Out1 = Tx.txOut era (C.lovelaceToValue 2_000_000) w1Address
@@ -933,7 +933,7 @@ parameterChangeProposalAndVoteTest
         _tx2In2 = Tx.txIn (Tx.txId signedTx1) 1
         tx2In3 = Tx.txIn (Tx.txId signedTx1) 2 -- change output
     result1TxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address tx2In3 "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address tx2In3 90 "getTxOutAtAddress"
     H.annotate $ show result1TxOut
 
     -- vote on the updated protocol parameters
@@ -963,7 +963,7 @@ parameterChangeProposalAndVoteTest
     Tx.submitTx sbe localNodeConnectInfo signedTx2
     let result2TxIn = Tx.txIn (Tx.txId signedTx2) 0
     result2TxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address result2TxIn "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address result2TxIn 90 "getTxOutAtAddress"
     H.annotate $ show result2TxOut
     success -- TODO: check protocol parameter update is enacted
 parameterChangeProposalAndVoteTest _ ScriptDRep{} _ _ _ =
@@ -1005,8 +1005,8 @@ treasuryWithdrawalProposalAndVoteTest
 
     -- build a transaction to propose a treasury withdrawal
 
-    let anchorUrl = (\t -> C.textToUrl (Text.length t) t) "https://example.com/treasury_withdrawal.txt"
-        anchor = C.createAnchor (fromJust anchorUrl) "treasury withdrawal"
+    anchorUrl <- H.evalEither $ maybe (Left "Invalid treasury withdrawal URL") Right $ (\t -> C.textToUrl (Text.length t) t) "https://example.com/treasury_withdrawal.txt"
+    let anchor = C.createAnchor anchorUrl "treasury withdrawal"
     tx1In <- Q.adaOnlyTxInAtAddress era localNodeConnectInfo w1Address
     let
       tx1Out1 = Tx.txOut era (C.lovelaceToValue 2_000_000) w1Address
@@ -1035,7 +1035,7 @@ treasuryWithdrawalProposalAndVoteTest
         _tx2In2 = Tx.txIn (Tx.txId signedTx1) 1
         tx2In3 = Tx.txIn (Tx.txId signedTx1) 2 -- change output
     result1TxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address tx2In3 "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address tx2In3 90 "getTxOutAtAddress"
     H.annotate $ show result1TxOut
 
     -- vote on the treasury withdrawal
@@ -1065,7 +1065,7 @@ treasuryWithdrawalProposalAndVoteTest
     Tx.submitTx sbe localNodeConnectInfo signedTx2
     let result2TxIn = Tx.txIn (Tx.txId signedTx2) 0
     result2TxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address result2TxIn "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address result2TxIn 90 "getTxOutAtAddress"
     H.annotate $ show result2TxOut
     success -- TODO: check treasury withdrawal is enacted
 treasuryWithdrawalProposalAndVoteTest _ ScriptDRep{} _ _ _ =
@@ -1114,8 +1114,8 @@ hardForkProposalAndVoteTest
 
     -- build a transaction to propose a treasury withdrawal
 
-    let anchorUrl = (\t -> C.textToUrl (Text.length t) t) "https://example.com/hard_fork.txt"
-        anchor = C.createAnchor (fromJust anchorUrl) "hard fork"
+    anchorUrl <- H.evalEither $ maybe (Left "Invalid hard_fork URL") Right $ (\t -> C.textToUrl (Text.length t) t) "https://example.com/hard_fork.txt"
+    let anchor = C.createAnchor anchorUrl "hard fork"
     tx1In <- Q.adaOnlyTxInAtAddress era localNodeConnectInfo w1Address
     let
       pvNat = toEnum $ TN.pvFromOptions networkOptions
@@ -1145,7 +1145,7 @@ hardForkProposalAndVoteTest
         _tx2In2 = Tx.txIn (Tx.txId signedTx1) 1
         tx2In3 = Tx.txIn (Tx.txId signedTx1) 2 -- change output
     result1TxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address tx2In3 "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address tx2In3 90 "getTxOutAtAddress"
     H.annotate $ show result1TxOut
 
     -- vote on the hard fork
@@ -1179,7 +1179,7 @@ hardForkProposalAndVoteTest
     Tx.submitTx sbe localNodeConnectInfo signedTx2
     let result2TxIn = Tx.txIn (Tx.txId signedTx2) 0
     result2TxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address result2TxIn "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address result2TxIn 90 "getTxOutAtAddress"
     H.annotate $ show result2TxOut
     success -- TODO: check hard fork is enacted
 hardForkProposalAndVoteTest _ ScriptDRep{} _ _ _ = error "hardForkProposalAndVoteTest: ScriptDRep not yet supported"
@@ -1220,8 +1220,8 @@ infoProposalAndVoteTest
 
     -- build a transaction to propose an Info action
 
-    let anchorUrl = (\t -> C.textToUrl (Text.length t) t) "https://example.com/info.txt"
-        anchor = C.createAnchor (fromJust anchorUrl) "Info"
+    anchorUrl <- H.evalEither $ maybe (Left "Invalid info URL") Right $ (\t -> C.textToUrl (Text.length t) t) "https://example.com/info.txt"
+    let anchor = C.createAnchor anchorUrl "Info"
     tx1In <- Q.adaOnlyTxInAtAddress era localNodeConnectInfo w1Address
     let
       tx1Out1 = Tx.txOut era (C.lovelaceToValue 2_000_000) w1Address
@@ -1249,7 +1249,7 @@ infoProposalAndVoteTest
         _tx2In2 = Tx.txIn (Tx.txId signedTx1) 1
         tx2In3 = Tx.txIn (Tx.txId signedTx1) 2 -- change output
     result1TxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address tx2In3 "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address tx2In3 90 "getTxOutAtAddress"
     H.annotate $ show result1TxOut
 
     -- vote on the hard fork
@@ -1288,6 +1288,7 @@ infoProposalAndVoteTest
         localNodeConnectInfo
         w1Address
         result2TxIn
+        90
         "getTxOutAtAddress"
     H.annotate $ show result2TxOut
     success -- TODO: check hard fork is enacted
@@ -1344,7 +1345,7 @@ unregisterDRep
     H.annotate $ show txId
     let expTxIn = Tx.txIn txId 0
     stakeDelegResultTxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address expTxIn "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address expTxIn 90 "getTxOutAtAddress"
     H.annotate $ show stakeDelegResultTxOut
     success
 
@@ -1389,7 +1390,7 @@ unregisterStakingTest
     Tx.submitTx sbe localNodeConnectInfo signedStakeUnregTx
     let expTxIn = Tx.txIn (Tx.txId signedStakeUnregTx) 0
     stakeDelegResultTxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address expTxIn "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address expTxIn 90 "getTxOutAtAddress"
     H.annotate $ show stakeDelegResultTxOut
     success
 
@@ -1439,7 +1440,7 @@ retireStakePoolTest
     Tx.submitTx sbe localNodeConnectInfo signedPoolRetireTx
     let expTxIn = Tx.txIn (Tx.txId signedPoolRetireTx) 0
     stakeDelegResultTxOut <-
-      Q.getTxOutAtAddress era localNodeConnectInfo w1Address expTxIn "getTxOutAtAddress"
+      Q.getTxOutAtAddress era localNodeConnectInfo w1Address expTxIn 90 "getTxOutAtAddress"
     H.annotate $ show stakeDelegResultTxOut
     success
 

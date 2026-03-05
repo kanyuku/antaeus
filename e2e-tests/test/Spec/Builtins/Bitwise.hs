@@ -66,6 +66,7 @@ verifyBitwiseFunctionsTest networkOptions TestParams{localNodeConnectInfo, ppara
               , PS_1_1.byteStringToIntegerAndBackMintWitnessV3 sbe "abcd"
               ]
           )
+        _ -> error $ "Unsupported era: " ++ show era
       txOut = Tx.txOut era (C.lovelaceToValue 3_000_000 <> tokenValues) w1Address
       collateral = Tx.txInsCollateral era [txIn]
       txBodyContent =
@@ -83,7 +84,7 @@ verifyBitwiseFunctionsTest networkOptions TestParams{localNodeConnectInfo, ppara
 
   -- Query for txo and assert it contains newly minting tokens to prove successful use of SECP256k1 builtins
   resultTxOut <-
-    Q.getTxOutAtAddress era localNodeConnectInfo w1Address expectedTxIn "TN.getTxOutAtAddress"
+    Q.getTxOutAtAddress era localNodeConnectInfo w1Address expectedTxIn 90 "TN.getTxOutAtAddress"
   txOutHasTokenValue <- Q.txOutHasValue resultTxOut tokenValues
   H.assert txOutHasTokenValue -- remove
   assert "txOut has tokens" txOutHasTokenValue
@@ -178,6 +179,7 @@ checkIntegerToByteStringError
             ( fromList [(PS_1_1.integerToByteStringAssetIdV3, 1)]
             , Map.fromList [PS_1_1.integerToByteStringMintWitnessV3 sbe params]
             )
+          _ -> error $ "Unsupported era: " ++ show era
         txOut = Tx.txOut era (C.lovelaceToValue 3_000_000 <> tokenValues) w1Address
         collateral = Tx.txInsCollateral era [txIn]
         txBodyContent =

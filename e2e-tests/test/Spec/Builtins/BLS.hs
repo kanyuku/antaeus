@@ -101,6 +101,7 @@ verifyBlsFunctionsTest networkOptions TestParams{..} = do
     localNodeConnectInfo
     w1Address
     (head expectedTxIns)
+    90
     "waitForTxInAtAddress"
 
   -- build and submit a transaction for each BLS script
@@ -139,7 +140,7 @@ verifyBlsFunctionsTest networkOptions TestParams{..} = do
 
   -- check that all scripts have minted the expected tokens
   resultTxOuts <- forM tokenValuesAndTxIns $ \(tokenValue, txIn) -> do
-    resultTxOut <- Q.getTxOutAtAddress era localNodeConnectInfo w1Address txIn "TN.getTxOutAtAddress"
+    resultTxOut <- Q.getTxOutAtAddress era localNodeConnectInfo w1Address txIn 90 "TN.getTxOutAtAddress"
     Q.txOutHasValue resultTxOut tokenValue
 
   assert "all txOuts have expected bls tokens" (and resultTxOuts)

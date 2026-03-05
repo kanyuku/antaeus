@@ -19,7 +19,6 @@ import Control.Monad (unless, void, when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.List (isInfixOf, sortBy)
 import Data.Map qualified as Map
-import Data.Maybe (fromJust)
 import Data.Set qualified as Set
 import Hedgehog (MonadTest)
 import Hedgehog.Extras.Test qualified as HE
@@ -128,14 +127,28 @@ getAddressTxInsValue era con address = do
       values = map (\case C.TxOut _ v _ _ -> C.txOutValueToValue v) txOuts
   pure (txIns, mconcat values)
 
--- TODO: loop timeout
-waitForTxIdAtAddress era localNodeConnectInfo address txId = do
-  let timeoutSeconds = 90 :: Int
-      loop 0 = error "waitForTxIdAtAddress: timeout"
+waitForTxIdAtAddress
+  :: (MonadIO m, MonadTest m)
+  => C.CardanoEra era
+  -> C.LocalNodeConnectInfo
+  -> C.Address C.ShelleyAddr
+  -> C.TxId
+  -> Int -- timeout in seconds
+  -> String -- temp debug text for intermittent timeout failure
+  -> m ()
+waitForTxIdAtAddress era localNodeConnectInfo address txId timeoutSeconds debugStr = do
+  let loop 0 =
+        error $
+          "waitForTxIdAtAddress timeout. \n-- Debug --\nTest function: "
+            ++ debugStr
+            ++ "\nAddress: "
+            ++ show address
+            ++ "\nTxId: "
+            ++ show txId
       loop i = do
         HE.threadDelay 1000000 -- 1s
         txIns <- txInsFromUtxo =<< findUTxOByAddress era localNodeConnectInfo address
-        let txIds = map (\(C.TxIn txId _) -> txId) txIns
+        let txIds = map (\(C.TxIn txId' _) -> txId') txIns
         unless (txId `elem` txIds) (loop (pred i))
   loop timeoutSeconds
 
@@ -145,11 +158,11 @@ waitForTxInAtAddress
   -> C.LocalNodeConnectInfo
   -> C.Address C.ShelleyAddr
   -> C.TxIn
+  -> Int -- timeout in seconds
   -> String -- temp debug text for intermittent timeout failure
   -> m ()
-waitForTxInAtAddress era localNodeConnectInfo address txIn debugStr = do
-  let timeoutSeconds = 90 :: Int
-      loop i prevUtxo = do
+waitForTxInAtAddress era localNodeConnectInfo address txIn timeoutSeconds debugStr = do
+  let loop i prevUtxo = do
         if i == 0
           then
             error
@@ -162,7 +175,7 @@ waitForTxInAtAddress era localNodeConnectInfo address txIn debugStr = do
                   ++ "\nPrev UTxO: "
                   ++ show prevUtxo
               )
-          else HE.threadDelay 1000000
+          else HE.threadDelay 1_000_000
         utxos <- findUTxOByAddress era localNodeConnectInfo address
         when (Map.notMember txIn $ C.unUTxO utxos) (loop (pred i) (show utxos))
   loop timeoutSeconds ""

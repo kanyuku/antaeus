@@ -12,7 +12,7 @@ module Helpers.TestResults (
 
 import Control.Monad (forM)
 import Data.IORef (IORef)
-import Data.Maybe (fromJust)
+import Data.Maybe (fromMaybe)
 import GHC.IORef (readIORef)
 import Text.XML.Light (
   Attr (Attr),
@@ -109,7 +109,7 @@ testCaseToJUnit suiteName result =
       defElement
         { elName = QName "failure" Nothing Nothing
         , elAttribs = [Attr (QName "message" Nothing Nothing) "test failure"] -- example type
-        , elContent = [Text $ CData CDataText (fromJust (resultFailure result)) Nothing]
+        , elContent = [Text $ CData CDataText (fromMaybe "" (resultFailure result)) Nothing]
         }
 
 allFailureMessages :: [IORef [TestResult]] -> IO [String]
